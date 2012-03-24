@@ -1,0 +1,87 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+    monstor_admin
+
+    Moster admin script
+
+    :copyright: (c) 2012 by Openlabs Technologies & Consulting (P) Limited
+    :license: BSD, see LICENSE for more details.
+"""
+import os
+import sys
+import logging
+import string
+import random
+
+logger = logging.getLogger("monstor_admin")
+logger.setLevel(level=logging.INFO)
+
+application_py_template = """#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import os
+
+from tornado import ioloop
+from tornado.options import options
+from monstor.app import make_app
+
+
+settings = {
+    'installed_apps': [
+        'monstor.contrib.auth',
+    ],
+    'cookie_secret': '%(cookie_secret)s',
+    'template_path': os.path.join(os.getcwd(), 'templates')
+}
+application = make_app(**settings)
+
+if __name__ == '__main__':
+    application.listen(options.port, address=options.address)
+    ioloop.IOLoop.instance().start()
+"""
+
+config_py_template = """#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# Database Settings
+
+database = '%(project)s_production'
+# db_host = "localhost"
+# db_port = 27017
+# db_username = "username"
+# db_password = "password"
+
+# login_url = "/login"
+"""
+
+def start_project(folder):
+    # Make project folder
+    logger.info("Create project folder")
+    os.mkdir(folder)
+
+    # Make templates folder
+    logger.info("Create templates and static folder")
+    os.mkdir(os.path.join(folder, 'templates'))
+    os.mkdir(os.path.join(folder, 'static'))
+
+    # Make application.py
+    logger.info("Create application.py executable")
+    with file(os.path.join(folder, 'application.py'), 'wb') as f:
+        template_vars = {
+            'cookie_secret': ''.join(
+                random.sample(string.letters + string.digits, 16)
+            ),
+        }
+        f.write(application_py_template % template_vars)
+
+    # Make config.py
+    logger.info("Create config.py")
+    with file(os.path.join(folder, 'config.py'), 'wb') as f:
+        f.write(config_py_template)
+
+
+if __name__ == '__main__':
+    if sys.argv[1] == 'start_project':
+        start_project(sys.argv[2])
+    else:
+        raise Exception("Invalid command")
