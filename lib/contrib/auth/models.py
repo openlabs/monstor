@@ -58,6 +58,7 @@ class User(Document):
 
     meta = {
         'indexes': ['email', 'facebook_id', 'twitter_id'],
+        'allow_inheritance': True,
         }
 
     def validate(self):
