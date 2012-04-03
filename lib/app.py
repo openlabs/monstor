@@ -71,7 +71,11 @@ def make_app(default_host='', transforms=None, wsgi=False, **settings):
     # XXX: Check again if DB must be loaded after or before apps
     if not options.options.database:
         raise InvalidRequestError("Database not spcified in options")
-    connect(options.options.database)
+    connect(
+        options.options.database, host=options.options.db_host,
+        port=options.options.db_port, username=options.options.db_username,
+        password=options.options.db_password
+    )
 
     handlers = []
     ui_modules = {}
