@@ -71,13 +71,14 @@ def start_project(folder):
             'cookie_secret': ''.join(
                 random.sample(string.letters + string.digits, 16)
             ),
+            'project': folder,
         }
         f.write(application_py_template % template_vars)
 
     # Make config.py
     logger.info("Create config.py")
     with file(os.path.join(folder, 'config.py'), 'wb') as f:
-        f.write(config_py_template)
+        f.write(config_py_template % template_vars)
 
 
 if __name__ == '__main__':
