@@ -81,12 +81,14 @@ class RegistrationHandler(BaseHandler):
             # First check if user exists
             user = User.objects(email=form.email.data).first()
             if user:
-                self.flash(
-                    self._(
-                        "This email is already registered. Click on sign In"
-                    ),
-                    "warning"
+                self.flash(_(
+                        "This email is already registered. Click on Sign In"
+                    ), "warning"
                 )
+                self.redirect(
+                    self.application.reverse_url("contrib.auth.registration")
+                )
+                return
             else:
                 user = User(
                     company_name = form.company_name.data,
@@ -96,7 +98,8 @@ class RegistrationHandler(BaseHandler):
                 user.set_password(form.password.data)
                 user.save(safe=True)
                 self.flash(
-                    _("Thank you for registering %(name)s", name=user.name)
+                    _("Thank you for registering %(name)s", name=user.name),
+                    'info'
                 )
                 self.set_secure_cookie("user", unicode(user.id))
                 self.redirect(
