@@ -10,7 +10,7 @@ from itertools import izip, repeat
 
 setup(
     name = "monstor",
-    version = "0.1",
+    version = "0.2dev",
     description = "Tornado and MongoDB web framework",
 
     author = "Openlabs Technologies & Consulting (P) Limited",
