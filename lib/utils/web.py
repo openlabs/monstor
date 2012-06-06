@@ -8,6 +8,7 @@
     :license: BSD, see LICENSE for more details.
 """
 import json
+from collections import defaultdict
 
 import tornado.web
 from monstor.utils import locale
@@ -15,6 +16,11 @@ from speaklater import make_lazy_gettext
 
 
 class BaseHandler(tornado.web.RequestHandler):
+
+    #: The messages which are yet to be written, but needs to be shown if a
+    #: local flash_message is called
+    #: Do not set this variable directly, use the helper methods instead
+    _messages = None
 
     def get_user_model(self):
         try:
@@ -38,6 +44,8 @@ class BaseHandler(tornado.web.RequestHandler):
                 self._locale = self.get_browser_locale()
                 assert self._locale
         return self._locale
+
+
 
     def prepare(self):
        from monstor.utils.i18n import t
@@ -112,39 +120,50 @@ class BaseHandler(tornado.web.RequestHandler):
         User = self.get_user_model()
         return User.objects().with_id(user_id)
 
-    def get_flashed_messages(self, category=None, destroy=True):
+    @property
+    def messages(self):
+        if self._messages is None:
+            self._messages = defaultdict(
+                list, json.loads(
+                    self.get_secure_cookie('flash_messages') or '{}'
+                )
+            )
+        return self._messages
+
+    @messages.setter
+    def messages(self, value):
+        if value is None:
+            value = defaultdict(list)
+        self._messages = value
+        self.set_secure_cookie(
+            'flash_messages', json.dumps(dict(self._messages))
+        )
+
+    def get_flashed_messages(self, category, destroy=True):
         """
         :param destroy: Should the messages be discarded after its fetched
         """
-        messages = self.get_secure_cookie('flash_messages') or '{}'
+        messages = self.messages
+
         if destroy:
-            self.set_flashed_message_category(category, None)
-        return json.loads(messages).setdefault(category, [])
+            messages_copy = self.messages.copy()
+            messages_copy[category] = []
+            self.messages = messages_copy
+
+        return messages.get(category, [])
 
     def get_all_messages(self, destroy=True):
         """
         :param destroy: Should the messages be discarded after its fetched
         """
-        messages = self.get_secure_cookie('flash_messages') or '{}'
+        messages = self.messages
+
         if destroy:
-            self.set_secure_cookie('flash_messages', '{}')
-        return json.loads(messages).iteritems()
+            self.messages = None
 
-    def set_flashed_message_category(self, category, value):
-        """
-        Sets the value of a specific message category
+        return messages.iteritems()
 
-        :param category: Name of the category
-        :param value: The list of messages
-        """
-        if value is None:
-            value = []
-        messages = self.get_secure_cookie('flash_messages') or '{}'
-        messages_dict = json.loads(messages)
-        messages_dict[category] = value
-        self.set_secure_cookie('flash_messages', json.dumps(messages_dict))
-
-    def flash(self, message, category=None):
+    def flash(self, message, category='default'):
         """
         flash messages of a category by calling `self.flash('message', 'cat')`
 
@@ -153,9 +172,9 @@ class BaseHandler(tornado.web.RequestHandler):
             self.flash("Welcome to our website", "info")
 
         """
-        messages = self.get_flashed_messages(category=category, destroy=False)
-        messages.append(unicode(message))
-        self.set_flashed_message_category(category, messages)
+        messages = self.messages.copy()
+        messages[category].append(unicode(message))
+        self.messages = messages
 
     def render_string(self, template_name, **kwargs):
         """
