@@ -72,8 +72,9 @@ class User(Document):
         for field in ("facebook_id", "twitter_id", "email"):
             value = getattr(self, field)
             if value:
-                existing = User.objects(**{field:value}).first()
-                if existing and (existing.id != self.id):
+                existing = User.objects(**{field: value}).all()
+                if len(existing) > 1 or \
+                        existing and existing[0] != self:
                     raise ValidationError("Duplicate %s: %s" % (field, value))
 
     def get_profile_picture(self):
