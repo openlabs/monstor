@@ -7,12 +7,16 @@
     :copyright: (c) 2012 by Openlabs Technologies & Consulting (P) Limited
     :license: BSD, see LICENSE for more details.
 """
-import requests 
+from datetime import datetime, timedelta
+
+import requests
+import pytz
 import unittest2 as unittest
 from mongoengine import connect, ValidationError, StringField
 from mongoengine.connection import _get_connection
 
 from monstor.contrib.auth.models import User
+
 
 class TestModel(unittest.TestCase):
 
@@ -35,8 +39,6 @@ class TestModel(unittest.TestCase):
         """
         Create a user
         """
-
-
         new_user = User(
             name="Sharoon Thomas", 
             email="sharoon.thomas@openlabs.co.in",
@@ -85,6 +87,29 @@ class TestModel(unittest.TestCase):
         user.save()
         self.assertEqual(User.objects().count(), 2)
         self.assertEqual(AnExtendedUser.objects().count(), 1)
+
+    def test_0050_timezone(self):
+        """
+        Test the `aslocaltime` feature of user which localises the time to the
+        timezone of the user.
+        """
+        sharoon = User.objects(email="sharoon.thomas@openlabs.co.in").first()
+
+        naive_dt = datetime(2012, 05, 10, 6, 0, 0)
+
+        # The default timezone of the user is UTC
+        self.assertEqual(
+            sharoon.aslocaltime(naive_dt), pytz.utc.localize(naive_dt)
+        )
+
+        # Change time zone to Eastern
+        sharoon.timezone = 'US/Eastern'
+        sharoon.save()
+
+        self.assertEqual(
+            sharoon.aslocaltime(naive_dt) - pytz.utc.localize(naive_dt),
+            timedelta(0)
+        )
 
     @classmethod
     def tearDownClass(cls):

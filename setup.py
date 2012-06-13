@@ -28,6 +28,7 @@ setup(
         "speaklater",
         "wtforms",
         "unidecode",
+        "pytz",
     ],
     packages = ['monstor'] + map(
         '.'.join, izip(repeat('monstor'), find_packages('lib'))
