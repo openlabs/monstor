@@ -12,6 +12,7 @@ import hashlib
 import random
 import string
 
+import pytz
 from mongoengine import Document, ValidationError
 from mongoengine import StringField, EmailField
 from monstor.utils.i18n import _
@@ -31,6 +32,9 @@ class User(Document):
     #: So this is manually implemented in :meth:validate
     email = EmailField(verbose_name=_("Email"))
     locale = StringField()
+    timezone = StringField(
+        choices=[(tz, tz) for tz in pytz.common_timezones], default='UTC'
+    )
 
     # For old school logins
     # .. note::
@@ -72,8 +76,9 @@ class User(Document):
         for field in ("facebook_id", "twitter_id", "email"):
             value = getattr(self, field)
             if value:
-                existing = User.objects(**{field:value}).first()
-                if existing and (existing.id != self.id):
+                existing = User.objects(**{field: value}).all()
+                if len(existing) > 1 or \
+                        existing and existing[0] != self:
                     raise ValidationError("Duplicate %s: %s" % (field, value))
 
     def get_profile_picture(self):
@@ -141,3 +146,19 @@ class User(Document):
             return user
 
         return False
+
+    def aslocaltime(self, naive_date):
+        """
+        Returns a localized time using `pytz.astimezone` method.
+
+        :param naive_date: a naive datetime (datetime with no timezone
+            information), which is assumed to be the UTC time.
+        :return: A datetime object with the local time.
+        """
+        utc_date = pytz.utc.localize(naive_date)
+
+        user_tz = pytz.timezone(self.timezone)
+        if user_tz == pytz.utc:
+            return utc_date
+
+        return utc_date.astimezone(user_tz)
