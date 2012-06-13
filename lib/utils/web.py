@@ -10,6 +10,8 @@
 import json
 from collections import defaultdict
 import re
+from math import ceil
+from copy import copy
 
 import tornado.web
 from monstor.utils import locale
@@ -205,3 +207,106 @@ class BaseHandler(tornado.web.RequestHandler):
             lower() == "xmlhttprequest",
             doc="""Detailed Documentation"""
     )
+
+
+class Pagination(object):
+    """
+    A pagination object which works with Mongoengine Query Sets
+    """
+
+    def __init__(self, page, per_page, query_set):
+        """
+        :param page: The page to be displayed
+        :param per_page: Items per page
+        :param query_set: The query set based on which pagination is to be done
+        """
+        self.page = page
+        self.per_page = per_page
+        self.query_set = query_set
+
+    @property
+    def count(self):
+        "Returns the total number of records in the query set"
+        return self.query_set.count()
+
+    def all_items(self):
+        """Returns complete set of items
+
+        .. warning::
+            This can end up being very inefficient depending upon the
+            number of records
+        """
+        return self.query_set.all()
+
+    def items(self):
+        """Returns the list of items in current page
+        """
+        qs_copy = copy(self.query_set)
+        return qs_copy[self.offset:self.offset + self.per_page]
+
+    def __iter__(self):
+        for item in self.items():
+            yield item
+
+    def __len__(self):
+        return self.count
+
+    def prev(self):
+        """Returns a :class:`Pagination` object for the previous page."""
+        return Pagination(self.page - 1, self.per_page, self.query_set)
+
+    def next(self):
+        """Returns a :class:`Pagination` object for the next page."""
+        return Pagination(self.page + 1, self.per_page, self.query_set)
+
+    #: Attributes below this may not require modifications in general cases
+
+    def iter_pages(self, left_edge=2, left_current=2,
+                    right_current=2, right_edge=2):
+        """Iterates over the page numbers in the pagination.  The four
+        parameters control the thresholds how many numbers should be produced
+        from the sides.  Skipped page numbers are represented as `None`.
+        This is how you could render such a pagination in the templates:
+
+        .. sourcecode:: html+jinja
+
+            <div class=pagination>
+            {%- for page in pagination.iter_pages() %}
+                {% if page %}
+                    {% if page != pagination.page %}
+                        <a href="{{ reverse_url(endpoint, page=page) }}">{{ page }}</a>
+                    {% else %}
+                        <strong>{{ page }}</strong>
+                    {% endif %}
+                {% else %}
+                    <span class=ellipsis>…</span>
+                {% end %}
+            {%- end %}
+            </div>
+        """
+        last = 0
+        for num in xrange(1, self.pages + 1):
+            if num <= left_edge or \
+                (num > self.page - left_current - 1 and \
+                 num < self.page + right_current) or \
+                num > self.pages - right_edge:
+                if last + 1 != num:
+                    yield None
+                yield num
+                last = num
+
+    offset = property(lambda self: (self.page - 1) * self.per_page)
+
+    prev_num = property(lambda self: self.page - 1)
+    has_prev = property(lambda self: self.page > 1)
+
+    next_num = property(lambda self: self.page + 1)
+    has_next = property(lambda self: self.page < self.pages)
+
+    pages = property(lambda self: int(ceil(self.count / float(self.per_page))))
+
+    begin_count = property(lambda self: min([
+        ((self.page - 1) * self.per_page) + 1,
+        self.count]))
+    end_count = property(lambda self: min(
+        self.begin_count + self.per_page - 1, self.count))
