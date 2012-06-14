@@ -10,8 +10,10 @@
 import json
 from collections import defaultdict
 import re
+import smtplib
 
 import tornado.web
+from tornado import options
 from monstor.utils import locale
 from speaklater import make_lazy_gettext
 from unidecode import unidecode
@@ -205,3 +207,28 @@ class BaseHandler(tornado.web.RequestHandler):
             lower() == "xmlhttprequest",
             doc="""Detailed Documentation"""
     )
+
+    def send_mail(self, sender, receiver, message):
+        """
+        Send email to receiver
+
+        :param sender: email Id of the sender
+        :param receiver: email Id of the receiver
+        :param message: email content
+        """
+        if options.options.smtp_ssl:
+            smtp_server = smtplib.SMTP_SSL(
+                options.options.smtp_server, options.options.smtp_port
+            )
+        else:
+            smtp_server = smtplib.SMTP(
+                options.options.smtp_server, options.options.smtp_port
+            )
+        if options.options.smtp_tls:
+            smtp_server.starttls()
+        if options.options.smtp_user and options.options.smtp_password:
+            smtp_server.login(
+                options.options.smtp_user, options.options.smtp_password
+            )
+        smtp_server.sendmail(sender, receiver, message)
+        smtp_server.quit()

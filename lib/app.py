@@ -26,6 +26,15 @@ options.define("db_port", default=27017, help="Port where mongod listen to")
 options.define("db_username", help="Username to connect to MongoDB")
 options.define("db_password", help="Username to connect to Paassword")
 
+# SMTP settings
+options.define("smtp_server", help="Email host server address")
+options.define("smtp_port", help="Email host port number")
+options.define("smtp_ssl", help="SSL protocol over SMTP")
+options.define("smtp_tls", help="TLS protocol over SMTP")
+options.define("smtp_user", help="Email host user name")
+options.define("smtp_password", help="Email host password")
+options.define("email_sender", help="User/Email shown as sender")
+
 DEFAULT_SETTINGS = {
     'xsrf_cookies': True,
 }
