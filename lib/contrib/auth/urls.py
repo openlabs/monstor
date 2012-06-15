@@ -10,7 +10,8 @@
 import tornado.web
 
 from monstor.contrib.auth.views import (FacebookLoginHandler, GoogleHandler,
-    TwitterHandler, LoginHandler, LogoutHandler, RegistrationHandler)
+    TwitterHandler, LoginHandler, LogoutHandler, RegistrationHandler,
+    AccountActivationHandler, ActivationKeyResendHandler)
 
 U = tornado.web.URLSpec
 
@@ -21,4 +22,8 @@ HANDLERS = [
     U(r'/login', LoginHandler, name='contrib.auth.login'),
     U(r'/logout', LogoutHandler, name='contrib.auth.logout'),
     U(r'/registration', RegistrationHandler, name='contrib.auth.registration'),
+    U(r'/activation/([a-zA-Z0-9\._]+)', AccountActivationHandler,
+        name="contrib.auth.activation"),
+    U(r'/activation_resend', ActivationKeyResendHandler,
+        name="contrib.auth.activation_resend"),
 ]
