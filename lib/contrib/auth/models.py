@@ -14,7 +14,7 @@ import string
 
 import pytz
 from mongoengine import Document, ValidationError
-from mongoengine import StringField, EmailField
+from mongoengine import StringField, EmailField, BooleanField
 from monstor.utils.i18n import _
 
 
@@ -24,6 +24,8 @@ class User(Document):
     """
     company_name = StringField(verbose_name=_("Name"))
     name = StringField(required=True, verbose_name=_("Name"))
+    active = BooleanField(default=False, verbose_name=_("Active"))
+    suspended = BooleanField(default=False, verbose_name=_("Suspended"))
 
     #: This field has to be unique but mongoengine on sending unique as True
     #: sets the same on the index. MongoDB considers NULL also as a unique

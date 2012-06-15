@@ -8,18 +8,24 @@
     :license: BSD, see LICENSE for more details.
 """
 import logging
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 import tornado.web
 import tornado.auth
 from tornado.options import define, options
 from mongoengine import Q
 from wtforms import Form, TextField, PasswordField, validators
+from itsdangerous import URLSafeSerializer
 
 from monstor.utils.wtforms import REQUIRED_VALIDATOR, EMAIL_VALIDATOR, \
     TornadoMultiDict
 from monstor.utils.web import BaseHandler
 from monstor.utils.i18n import _
 
+define("require_activation", type=bool,
+    help="Email activation will be made mandatory for new manual\
+    registrations.", default=False)
 define("twitter_consumer_key", help="Twitter consumer key")
 define("twitter_consumer_secret", help="Twitter consumer secret")
 
@@ -32,6 +38,60 @@ define("facebook_secret", help="Facebook application secret")
 # -- Too few public methods
 
 logger = logging.getLogger(__name__)
+
+
+class ActivationKeyMixin(object):
+    """
+    A mixin class which makes it possible to create an activation key and
+    send it to the user.
+    """
+    def create_activation_key(self, user):
+        """
+        Build an account activation key and build the email
+        """
+        signer = URLSafeSerializer(self.application.settings["cookie_secret"])
+        activation_key = signer.dumps(user.email)
+        parts = []
+        try:
+            parts.append(
+                MIMEText(
+                    self.render_string(
+                        'emails/activation-html.html',
+                        activation_key=activation_key
+                    ), 'html'
+                )
+            )
+        except IOError:
+            logging.warning('No HTML template emails/activation-html.html')
+
+        try:
+            parts.append(
+                MIMEText(
+                    self.render_string(
+                        "emails/activation-text.html",
+                        activation_key=activation_key
+                    ), 'text'
+                )
+            )
+        except IOError:
+            logging.warning("No TEXT template emails/activation-text.html")
+        if not parts:
+            # Fallback to simple string replace since no templates have been
+            # defined.
+            parts.append(
+                MIMEText(
+                    'To activate click: %s' %
+                    self.reverse_url('contrib.auth.activation', activation_key)
+                    , 'text'
+                )
+            )
+        message = MIMEMultipart('alternative')
+        message['Subject'] = _("Activate your Account")
+        message['From'] = options.email_sender
+        message['To'] = user.email
+        for part in parts:
+            message.attach(part)
+        self.send_mail(options.email_sender, user.email, message.as_string())
 
 
 class RegistrationForm(Form):
@@ -52,7 +112,7 @@ class RegistrationForm(Form):
     )
 
 
-class RegistrationHandler(BaseHandler):
+class RegistrationHandler(BaseHandler, ActivationKeyMixin):
     """
     Regular username and password based authentication
     """
@@ -85,10 +145,6 @@ class RegistrationHandler(BaseHandler):
                         "This email is already registered. Click on Sign In"
                     ), "warning"
                 )
-                self.redirect(
-                    self.application.reverse_url("contrib.auth.registration")
-                )
-                return
             else:
                 user = User(
                     company_name = form.company_name.data,
@@ -97,21 +153,39 @@ class RegistrationHandler(BaseHandler):
                 )
                 user.set_password(form.password.data)
                 user.save(safe=True)
-                self.flash(
-                    _("Thank you for registering %(name)s", name=user.name),
-                    'info'
-                )
-                self.set_secure_cookie("user", unicode(user.id))
-                self.redirect(
-                    self.get_argument('next', None) or \
-                        self.application.reverse_url("home")
-                )
-                return
+                if options.require_activation:
+                    self.create_activation_key(user)
+                    self.flash(
+                        _("Thank you for registering %(name)s. Please check\
+                            your Inbox and follow the instructions",
+                            name=user.name), 'info'
+                    )
+                    self.redirect(self.reverse_url("home"))
+                    return
+                else:
+                    user.active = True
+                    user.save()
+                    self.flash(
+                       _("Thank you for registering %(name)s", name=user.name),
+                        'info'
+                    )
+                    self.set_secure_cookie("user", unicode(user.id))
+                    self.redirect(
+                        self.get_argument('next', None) or \
+                            self.reverse_url("home")
+                    )
+                    return
+        else:
+            self.flash(
+                _("There were error(s) in processing your registration."),
+                'error'
+            )
         self.render('user/registration.html', registration_form=form)
 
 
 class LoginForm(Form):
     """Traditional Login Form"""
+
     email = TextField(_('Email'), [EMAIL_VALIDATOR, REQUIRED_VALIDATOR])
     password = PasswordField(_("Password"), [REQUIRED_VALIDATOR])
 
@@ -141,11 +215,21 @@ class LoginHandler(BaseHandler):
         if form.validate():
             user = User.authenticate(form.email.data, form.password.data)
             if user:
+                if options.require_activation and not user.active:
+                    self.flash(
+                        _("User not activated yet, please activate your\
+                            account"
+                        ), "warning"
+                    )
+                    self.redirect(
+                        self.reverse_url("contrib.auth.activation_resend")
+                    )
+                    return
                 self.set_secure_cookie("user", unicode(user.id))
                 self.flash(_("Welcome back %(name)s", name=user.name), 'info')
                 self.redirect(
                     self.get_argument('next', None) or \
-                        self.application.reverse_url("home")
+                        self.reverse_url("home")
                 )
                 return
             self.flash(_("The email or password is invalid"), 'error')
@@ -214,7 +298,8 @@ class GoogleHandler(BaseHandler, tornado.auth.GoogleMixin):
 
 
 class TwitterHandler(BaseHandler, tornado.auth.TwitterMixin):
-    """Twitter Authentication handler
+    """
+    Twitter Authentication handler
     """
     @tornado.web.asynchronous
     def get(self):
@@ -348,3 +433,74 @@ class FacebookLoginHandler(BaseHandler, tornado.auth.FacebookGraphMixin):
             self.get_argument('next', None) or \
                 self.application.reverse_url("home")
         )
+
+
+class AccountActivationHandler(BaseHandler):
+    """
+    Activate the user account
+    """
+    def get(self, activation_key):
+        """
+        Acccept the Activation key from url and activate the user account
+        """
+        signer = URLSafeSerializer(self.application.settings["cookie_secret"])
+        User = self.get_user_model()
+        user = User.objects(email=signer.loads(activation_key)).first()
+        if not user:
+            self.flash(
+                _('Invalid Activation Key, Please register.'), 'warning'
+            )
+            self.redirect(self.reverse_url("contrib.auth.registration"))
+            return
+        user.active = True
+        user.save()
+        self.flash(
+            _("Thank you for activating your account. Please login again."),
+            'info'
+        )
+        self.redirect(self.reverse_url('contrib.auth.login'))
+
+
+class ActivationResendForm(Form):
+    """Activation key resend Form"""
+
+    email = TextField(_('Email'), [EMAIL_VALIDATOR, REQUIRED_VALIDATOR])
+
+
+class ActivationKeyResendHandler(BaseHandler, ActivationKeyMixin):
+    """
+    Resend the activation key
+    """
+    def get(self):
+        """
+        Renders a page for activation key regeneration
+        """
+        form = ActivationResendForm(
+            email=self.get_argument('email', default=None)
+        )
+        self.render('user/activation_resend.html', form=form)
+        return
+
+    def post(self):
+        """
+        Accept the email Id from the user and create a new activation key
+        also send it to the given email id.
+        """
+        User = self.get_user_model()
+        form = ActivationResendForm(TornadoMultiDict(self))
+        if form.validate():
+            user = User.objects(email=form.email.data).first()
+            if user:
+                self.create_activation_key(user)
+                self.flash(
+                    _("An email has been send to the given email Id. Please\
+                    check your inbox and follow the instructions ")
+                )
+                self.redirect(self.reverse_url('contrib.auth.login'))
+                return
+            self.flash(
+                _("Oops! we could not match your email with any of our users"),
+                "error"
+            )
+        self.render('user/activation_resend.html', form=form)
+
