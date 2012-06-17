@@ -20,7 +20,7 @@ setup(
 
     install_requires = [
         "distribute",
-        "tornado",
+        "tornado>2.1,<2.3",
         "mongoengine",
         "babel",
         "requests",
