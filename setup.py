@@ -29,6 +29,7 @@ setup(
         "wtforms",
         "unidecode",
         "pytz",
+        "itsdangerous",
     ],
     packages = ['monstor'] + map(
         '.'.join, izip(repeat('monstor'), find_packages('lib'))
