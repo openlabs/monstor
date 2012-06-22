@@ -361,7 +361,12 @@ class FacebookLoginHandler(BaseHandler, tornado.auth.FacebookGraphMixin):
 
     @tornado.web.asynchronous
     def get(self):
-        redirect_uri = self.application.reverse_url('contrib.auth.facebook')
+        redirect_uri = ''.join((
+            self.request.protocol,
+            '://',
+            self.request.host,
+            self.reverse_url('contrib.auth.facebook'),
+        ))
         if self.get_argument("code", False):
             # If there is a code argument in the URL then it's a return from 
             # facebook. Then send it back to facebook and get information about
