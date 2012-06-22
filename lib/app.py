@@ -95,6 +95,11 @@ def make_app(default_host='', transforms=None, wsgi=False, **settings):
 
     app_settings.setdefault('ui_modules', {}).update(ui_modules)
 
+    # Parse the config file again because the modules might have introduced
+    # additional options
+    if config_file:
+        options.parse_config_file(config_file)
+
     application = Application(
         handlers, default_host, transforms, wsgi, **app_settings
     )
