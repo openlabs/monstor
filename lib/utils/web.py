@@ -269,7 +269,7 @@ class Pagination(object):
         """Returns the list of items in current page
         """
         qs_copy = copy(self.query_set)
-        return qs_copy[self.offset:self.offset + self.per_page]
+        return qs_copy.skip(self.offset).limit(self.per_page)
 
     def __iter__(self):
         for item in self.items():
