@@ -144,6 +144,9 @@ class User(Document):
         if not user:
             return None
 
+        if not user.password:
+            return False
+
         if user.password == User.make_hash(password, user.salt):
             return user
 
