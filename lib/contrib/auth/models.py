@@ -100,7 +100,7 @@ class User(Document):
         """
         Gets the gravatar for the user based on the email
         """
-        url = 'http://www.gravatar.com/avatar/%s?'
+        url = 'https://secure.gravatar.com/avatar/%s?'
         url = url % hashlib.md5(self.email.lower()).hexdigest()
 
         params = []
