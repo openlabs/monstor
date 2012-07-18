@@ -30,6 +30,7 @@ setup(
         "unidecode",
         "pytz",
         "itsdangerous",
+        "blinker",
     ],
     packages = ['monstor'] + map(
         '.'.join, izip(repeat('monstor'), find_packages('lib'))
