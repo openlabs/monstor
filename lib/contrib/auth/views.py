@@ -24,6 +24,7 @@ from monstor.utils.wtforms import REQUIRED_VALIDATOR, EMAIL_VALIDATOR, \
     TornadoMultiDict
 from monstor.utils.web import BaseHandler
 from monstor.utils.i18n import _
+from monstor.contrib.auth.signals import login_success, login_failure
 
 define("require_activation", type=bool,
     help="Email activation will be made mandatory for new manual\
@@ -228,12 +229,14 @@ class LoginHandler(BaseHandler):
                     )
                     return
                 self.set_secure_cookie("user", unicode(user.id))
+                login_success.send(self, user=user)
                 self.flash(_("Welcome back %(name)s", name=user.name), 'info')
                 self.redirect(
                     self.get_argument('next', None) or \
                         self.reverse_url("home")
                 )
                 return
+            login_failure.send(self)
             self.flash(_("The email or password is invalid"), 'error')
         self.render('user/login.html', login_form=form)
 
@@ -271,6 +274,7 @@ class GoogleHandler(BaseHandler, tornado.auth.GoogleMixin):
         logger.info(user_data)
 
         if not user_data:
+            login_failure.send(self)
             self.flash(_("Login using Google failed, please try again"))
             self.redirect(self.application.reverse_url("contrib.auth.login"))
             self.finish()
@@ -291,6 +295,7 @@ class GoogleHandler(BaseHandler, tornado.auth.GoogleMixin):
             )
 
         self.set_secure_cookie("user", unicode(user.id))
+        login_success.send(self, user=user)
 
         # Finally issue a redirect if the login was successful
         self.redirect(
@@ -318,6 +323,7 @@ class TwitterHandler(BaseHandler, tornado.auth.TwitterMixin):
         logger.info(user_data)
 
         if not user_data:
+            login_failure.send(self)
             self.flash(_("Login using Twitter failed, please try again"))
             self.redirect(self.application.reverse_url("contrib.auth.login"))
             self.finish()
@@ -341,6 +347,7 @@ class TwitterHandler(BaseHandler, tornado.auth.TwitterMixin):
             )
 
         self.set_secure_cookie("user", unicode(user.id))
+        login_success.send(self, user=user)
 
         # Finally redirect to the home page once the user has been created
         self.redirect(
@@ -400,6 +407,7 @@ class FacebookLoginHandler(BaseHandler, tornado.auth.FacebookGraphMixin):
         logger.info(user_data)
 
         if not user_data:
+            login_failure.send(self)
             self.flash(_("Login using Facebook failed, please try again"))
             self.redirect(self.application.reverse_url("contrib.auth.login"))
             self.finish()
@@ -435,6 +443,7 @@ class FacebookLoginHandler(BaseHandler, tornado.auth.FacebookGraphMixin):
             )
 
         self.set_secure_cookie("user", unicode(user.id))
+        login_success.send(self, user=user)
 
         self.redirect(
             self.get_argument('next', None) or \
