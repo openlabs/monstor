@@ -11,7 +11,8 @@ import tornado.web
 
 from monstor.contrib.auth.views import (FacebookLoginHandler, GoogleHandler,
     TwitterHandler, LoginHandler, LogoutHandler, RegistrationHandler,
-    AccountActivationHandler, ActivationKeyResendHandler)
+    AccountActivationHandler, ActivationKeyResendHandler,
+    SendPasswordResetKeyHandler, PasswordResetHandler)
 
 U = tornado.web.URLSpec
 
@@ -26,4 +27,8 @@ HANDLERS = [
         name="contrib.auth.activation"),
     U(r'/activation_resend', ActivationKeyResendHandler,
         name="contrib.auth.activation_resend"),
+
+    U(r'/send-reset-key', SendPasswordResetKeyHandler, name='send.reset.key'),
+    U(r'/reset-password',
+        PasswordResetHandler, name='reset.password'),
 ]
