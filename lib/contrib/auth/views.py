@@ -7,6 +7,8 @@
     :copyright: (c) 2012 by Openlabs Technologies & Consulting (P) Limited
     :license: BSD, see LICENSE for more details.
 """
+import string
+import random
 import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -509,3 +511,201 @@ class ActivationKeyResendHandler(BaseHandler, ActivationKeyMixin):
             )
         self.render('user/activation_resend.html', form=form)
 
+
+class SendPasswordResetForm(Form):
+    """Send the password reset key for email provided
+    """
+    email = TextField('Email', [EMAIL_VALIDATOR, REQUIRED_VALIDATOR])
+
+
+class SendPasswordResetKeyHandler(BaseHandler):
+    """Sends the password reset key
+    """
+
+    def get(self):
+        "Render the form"
+        form = SendPasswordResetForm(TornadoMultiDict(self))
+
+        return self.render('user/send_reset_key.html', form=form)
+
+    def send_password_reset_mail(self, user):
+        """Send the Beta Registration Confirmation Email
+        """
+        # Create message container, the correct MIME type is
+        # multipart/alternative.
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = "Reset your account password"
+        msg['From'] = options.email_sender
+        msg['To'] = user.email
+
+        # Create the body of the message (a plain-text and an HTML version).
+        # text is your plain-text email
+        # html is your html version of the email
+        # if the reciever is able to view html emails then only the html
+        # email will be displayed
+
+        parts = []
+        try:
+            parts.append(
+                MIMEText(
+                    self.render_string(
+                        'emails/send_password_reset_mail_html.html',
+                        user=user
+                    ), 'html'
+                )
+            )
+        except IOError:
+            logging.warning(
+                'No HTML template emails/send_password_reset_mail_html.html'
+            )
+
+        try:
+            parts.append(
+                MIMEText(
+                    self.render_string(
+                        "emails/send_password_reset_mail_text.html",
+                        user=user
+                    ), 'plain'
+                )
+            )
+        except IOError:
+            logging.warning(
+                "No TEXT template emails/send_password_reset_mail_text.html"
+            )
+        if not parts:
+            # Fallback to simple string replace since no templates have been
+            # defined.
+            parts.append(
+                MIMEText(
+                    'To reset your account password, click: \
+                        http://%(host)s%(url)s\
+                            ?email=%(email)s&reset_key=%(reset_key)s' %
+                        {
+                            'host': self.request.host,
+                            'url': self.reverse_url('reset.password'),
+                            'email': user.email,
+                            'reset_key': user.reset_key
+                        }, 'plain'
+                )
+            )
+
+        # Attach parts into message container.
+        for part in parts:
+            msg.attach(part)
+
+        self.send_mail(options.email_sender, user.email, msg.as_string())
+
+    def post(self):
+        "Sends the reset key"
+        form = SendPasswordResetForm(TornadoMultiDict(self))
+
+        if form.validate():
+            User = self.get_user_model()
+            email = form.email.data
+
+            # Check if email exists in database
+            user = User.objects(email=email).first()
+
+            if not user:
+                self.flash(
+                    _('Email entered is not registered with us'), 'error'
+                )
+                self.render('user/send_reset_key.html', form=form)
+                return
+
+            reset_key = ''.join(
+                random.sample(string.letters + string.digits, 15)
+            )
+            user.reset_key = reset_key
+            user.save()
+
+            # Send him a mail with invite
+            self.send_password_reset_mail(user)
+
+            self.flash(
+                _('Instructions for resetting your password have been \
+                    emailed to %s' % email), 'info'
+            )
+
+            self.redirect(
+                self.get_argument('next', None) or \
+                self.application.reverse_url("home")
+            )
+            return
+        else:
+            return self.render('user/send_reset_key.html', form=form)
+
+
+class DoPasswordResetForm(Form):
+    """Password Reset Form
+    """
+    password = PasswordField(
+        _("Password"), [
+            REQUIRED_VALIDATOR,
+            validators.EqualTo(
+                'confirm_password', message=_('Passwords must match')
+            )
+        ]
+    )
+    confirm_password = PasswordField(
+        _("Confirm Password"), [REQUIRED_VALIDATOR, ]
+    )
+
+
+class PasswordResetHandler(BaseHandler):
+    """Password Reset
+    """
+
+    def get(self):
+        "Render password reset form"
+        User = self.get_user_model()
+        form = DoPasswordResetForm(TornadoMultiDict(self))
+
+        reset_key = self.get_argument('reset_key', None)
+        email = self.get_argument('email', None)
+
+        user = User.objects(email=email, reset_key=reset_key).first()
+
+        if not reset_key or not user:
+            self.flash(_('No Valid Password Reset Key found'), 'error')
+
+            self.redirect(self.reverse_url('send.reset.key'))
+            return
+
+        return self.render(
+            'user/password_reset.html', form=form, user=user
+        )
+
+    def post(self):
+        "Do password reset"
+        form = DoPasswordResetForm(TornadoMultiDict(self))
+
+        reset_key = self.get_argument('reset_key', None)
+        email = self.get_argument('email', None)
+        User = self.get_user_model()
+
+        user = User.objects(email=email, reset_key=reset_key).first()
+
+        if not reset_key or not user:
+            self.flash(_(
+                    "Invalid user, Try again."
+                ), "warning"
+            )
+            self.redirect(self.reverse_url('send.reset.key'))
+            return
+
+        if form.validate():
+            user.set_password(form.password.data)
+            user.reset_key = None
+            user.save(safe=True)
+
+            self.flash(
+                _('Password has been successfully reset.'), 'info'
+            )
+
+            self.redirect(self.reverse_url('home'))
+            return
+
+        return self.render(
+            'user/password_reset.html', form=form, user=user
+        )

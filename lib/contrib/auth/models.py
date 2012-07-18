@@ -62,6 +62,10 @@ class User(Document):
     twitter_username = StringField()
     twitter_profile_picture = StringField()
 
+    #: Password Reset Key
+    #: Presence of this key indicates that user has asked for password reset
+    reset_key = StringField(verbose_name="Password Reset Key")
+
     meta = {
         'indexes': ['email', 'facebook_id', 'twitter_id'],
         'allow_inheritance': True,
